@@ -42,6 +42,7 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.WindowManager.LayoutParams;
@@ -955,6 +956,9 @@ public class InAppBrowser extends CordovaPlugin {
                 inAppWebView.setId(Integer.valueOf(6));
                 // File Chooser Implemented ChromeClient
                 inAppWebView.setWebChromeClient(new InAppChromeClient(thatWebView) {
+                    private View mCustomView;
+                    private CustomViewCallback mCustomViewCallback;
+
                     public boolean onShowFileChooser (WebView webView, ValueCallback<Uri[]> filePathCallback, WebChromeClient.FileChooserParams fileChooserParams)
                     {
                         LOG.d(LOG_TAG, "File Chooser 5.0+");
@@ -973,6 +977,58 @@ public class InAppBrowser extends CordovaPlugin {
                         cordova.startActivityForResult(InAppBrowser.this, Intent.createChooser(content, "Select File"), FILECHOOSER_REQUESTCODE);
                         return true;
                     }
+
+                    @Override
+                    public void onShowCustomView(View view, CustomViewCallback callback) {
+                        if (mCustomView != null) {
+                            callback.onCustomViewHidden();
+                            return;
+                        }
+                        mCustomView = view;
+                        mCustomViewCallback = callback;
+
+                        dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+                        dialog.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN);
+                        dialog.setContentView(view);
+                    }
+
+                    @Override
+                    public void onHideCustomView() {
+                        if (mCustomView == null) {
+                            return;
+                        }
+
+                        ViewGroup parent = (ViewGroup) mCustomView.getParent();
+                        if (parent != null) {
+                            parent.removeView(mCustomView);
+                        }
+
+                        // get parent from dialog
+                        if (dialog != null) {
+                            ViewGroup dialogParent = (ViewGroup) dialog.findViewById(android.R.id.content);
+                            if (dialogParent != null) {
+                                dialogParent.removeAllViews(); // remove all views
+                            }
+                        }
+
+                        dialog.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+                        dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN);
+
+                        // if webview already contains parent element, remove it
+                        ViewGroup webViewParent = (ViewGroup) inAppWebView.getParent();
+                        if (webViewParent != null) {
+                            webViewParent.removeView(inAppWebView);
+                        }
+
+
+                        // set origin value
+                        dialog.setContentView(inAppWebView);
+
+                        mCustomView = null;
+                        if (mCustomViewCallback != null) {
+                            mCustomViewCallback.onCustomViewHidden();
+                        }
+                    }
                 });
                 currentClient = new InAppBrowserClient(thatWebView, edittext, beforeload);
                 inAppWebView.setWebViewClient(currentClient);
@@ -981,30 +1037,30 @@ public class InAppBrowser extends CordovaPlugin {
                 settings.setJavaScriptCanOpenWindowsAutomatically(true);
                 settings.setBuiltInZoomControls(showZoomControls);
                 settings.setPluginState(android.webkit.WebSettings.PluginState.ON);
-                
+
                 // download event
-                
+
                 inAppWebView.setDownloadListener(
-                    new DownloadListener(){
-                        public void onDownloadStart(
-                                String url, String userAgent, String contentDisposition, String mimetype, long contentLength
-                        ){
-                            try{
-                                JSONObject succObj = new JSONObject();
-                                succObj.put("type", DOWNLOAD_EVENT);
-                                succObj.put("url",url);
-                                succObj.put("userAgent",userAgent);
-                                succObj.put("contentDisposition",contentDisposition);
-                                succObj.put("mimetype",mimetype);
-                                succObj.put("contentLength",contentLength);
-                                sendUpdate(succObj, true);
-                            }
-                            catch(Exception e){
-                                LOG.e(LOG_TAG,e.getMessage());
+                        new DownloadListener(){
+                            public void onDownloadStart(
+                                    String url, String userAgent, String contentDisposition, String mimetype, long contentLength
+                            ){
+                                try{
+                                    JSONObject succObj = new JSONObject();
+                                    succObj.put("type", DOWNLOAD_EVENT);
+                                    succObj.put("url",url);
+                                    succObj.put("userAgent",userAgent);
+                                    succObj.put("contentDisposition",contentDisposition);
+                                    succObj.put("mimetype",mimetype);
+                                    succObj.put("contentLength",contentLength);
+                                    sendUpdate(succObj, true);
+                                }
+                                catch(Exception e){
+                                    LOG.e(LOG_TAG,e.getMessage());
+                                }
                             }
                         }
-                    }
-                );        
+                );
 
                 // Add postMessage interface
                 class JsObject {
@@ -1544,25 +1600,25 @@ public class InAppBrowser extends CordovaPlugin {
                 obj.put("sslerror", error.getPrimaryError());
                 String message;
                 switch (error.getPrimaryError()) {
-                case SslError.SSL_DATE_INVALID:
-                    message = "The date of the certificate is invalid";
-                    break;
-                case SslError.SSL_EXPIRED:
-                    message = "The certificate has expired";
-                    break;
-                case SslError.SSL_IDMISMATCH:
-                    message = "Hostname mismatch";
-                    break;
-                default:
-                case SslError.SSL_INVALID:
-                    message = "A generic error occurred";
-                    break;
-                case SslError.SSL_NOTYETVALID:
-                    message = "The certificate is not yet valid";
-                    break;
-                case SslError.SSL_UNTRUSTED:
-                    message = "The certificate authority is not trusted";
-                    break;
+                    case SslError.SSL_DATE_INVALID:
+                        message = "The date of the certificate is invalid";
+                        break;
+                    case SslError.SSL_EXPIRED:
+                        message = "The certificate has expired";
+                        break;
+                    case SslError.SSL_IDMISMATCH:
+                        message = "Hostname mismatch";
+                        break;
+                    default:
+                    case SslError.SSL_INVALID:
+                        message = "A generic error occurred";
+                        break;
+                    case SslError.SSL_NOTYETVALID:
+                        message = "The certificate is not yet valid";
+                        break;
+                    case SslError.SSL_UNTRUSTED:
+                        message = "The certificate authority is not trusted";
+                        break;
                 }
                 obj.put("message", message);
 
