@@ -693,7 +693,16 @@ BOOL isExiting = FALSE;
         ) {
         userAgent = [NSString stringWithFormat:@"%@ %@", userAgent, [self settingForKey:@"AppendUserAgent"]];
     }
-    configuration.applicationNameForUserAgent = userAgent;
+  
+    // BEKBAPP-3433
+    NSString *osVersion = [[UIDevice currentDevice] systemVersion];
+    NSString *osVersionString = [NSString stringWithFormat:@"Version/%@", osVersion];
+    // Hacky as hell, but Mesoneer (Partner for the GWG/DPP portal) instrcuted us to do so
+    NSString *safariVersionString = @"Safari/604.1";
+    NSString *newUserAgent = [NSString stringWithFormat:@"%@ %@ %@", osVersionString, userAgent, safariVersionString];
+    NSLog(@"InAppBrowser hack for UserAgent! Setting it to %@", newUserAgent);
+    configuration.applicationNameForUserAgent = newUserAgent;
+  
     configuration.userContentController = userContentController;
 #if __has_include(<Cordova/CDVWebViewProcessPoolFactory.h>)
     configuration.processPool = [[CDVWebViewProcessPoolFactory sharedFactory] sharedProcessPool];
