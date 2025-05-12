@@ -955,81 +955,82 @@ public class InAppBrowser extends CordovaPlugin {
                 inAppWebView.setLayoutParams(new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
                 inAppWebView.setId(Integer.valueOf(6));
                 // File Chooser Implemented ChromeClient
-                inAppWebView.setWebChromeClient(new InAppChromeClient(thatWebView) {
-                    private View mCustomView;
-                    private CustomViewCallback mCustomViewCallback;
+              inAppWebView.setWebChromeClient(new InAppChromeClient(thatWebView) {
+                private View mCustomView;
+                private CustomViewCallback mCustomViewCallback;
 
-                    public boolean onShowFileChooser (WebView webView, ValueCallback<Uri[]> filePathCallback, WebChromeClient.FileChooserParams fileChooserParams)
-                    {
-                        LOG.d(LOG_TAG, "File Chooser 5.0+");
-                        // If callback exists, finish it.
-                        if(mUploadCallback != null) {
-                            mUploadCallback.onReceiveValue(null);
-                        }
-                        mUploadCallback = filePathCallback;
-
-                        // Create File Chooser Intent
-                        Intent content = new Intent(Intent.ACTION_GET_CONTENT);
-                        content.addCategory(Intent.CATEGORY_OPENABLE);
-                        content.setType("*/*");
-
-                        // Run cordova startActivityForResult
-                        cordova.startActivityForResult(InAppBrowser.this, Intent.createChooser(content, "Select File"), FILECHOOSER_REQUESTCODE);
-                        return true;
-                    }
-
-                    @Override
-                    public void onShowCustomView(View view, CustomViewCallback callback) {
-                        if (mCustomView != null) {
-                            callback.onCustomViewHidden();
-                            return;
-                        }
-                        mCustomView = view;
-                        mCustomViewCallback = callback;
-
-                        dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
-                        dialog.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN);
-                        dialog.setContentView(view);
-                    }
-
-                    @Override
-                    public void onHideCustomView() {
-                        if (mCustomView == null) {
-                            return;
-                        }
-
-                        ViewGroup parent = (ViewGroup) mCustomView.getParent();
-                        if (parent != null) {
-                            parent.removeView(mCustomView);
-                        }
-
-                        // get parent from dialog
-                        if (dialog != null) {
-                            ViewGroup dialogParent = (ViewGroup) dialog.findViewById(android.R.id.content);
-                            if (dialogParent != null) {
-                                dialogParent.removeAllViews(); // remove all views
-                            }
-                        }
-
-                        dialog.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
-                        dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN);
-
-                        // if webview already contains parent element, remove it
-                        ViewGroup webViewParent = (ViewGroup) inAppWebView.getParent();
-                        if (webViewParent != null) {
-                            webViewParent.removeView(inAppWebView);
-                        }
+                // Save all children of the main layout before entering fullscreen
+                private List<View> savedViews = new ArrayList<>();
 
 
-                        // set origin value
-                        dialog.setContentView(inAppWebView);
+                public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, WebChromeClient.FileChooserParams fileChooserParams) {
+                  LOG.d(LOG_TAG, "File Chooser 5.0+");
+                  // If callback exists, finish it.
+                  if (mUploadCallback != null) {
+                    mUploadCallback.onReceiveValue(null);
+                  }
+                  mUploadCallback = filePathCallback;
 
-                        mCustomView = null;
-                        if (mCustomViewCallback != null) {
-                            mCustomViewCallback.onCustomViewHidden();
-                        }
-                    }
-                });
+                  // Create File Chooser Intent
+                  Intent content = new Intent(Intent.ACTION_GET_CONTENT);
+                  content.addCategory(Intent.CATEGORY_OPENABLE);
+                  content.setType("*/*");
+
+                  // Run cordova startActivityForResult
+                  cordova.startActivityForResult(InAppBrowser.this, Intent.createChooser(content, "Select File"), FILECHOOSER_REQUESTCODE);
+                  return true;
+                }
+
+                @Override
+                public void onHideCustomView() {
+                  if (mCustomView == null) {
+                    return;
+                  }
+
+                  // Clear the fullscreen flags
+                  if (dialog != null) {
+                    dialog.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+                    dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN);
+                  }
+
+                  // Restore all saved child views back to the main layout
+                  main.removeAllViews(); // Remove current view(s)
+                  for (View savedView : savedViews) {
+                    main.addView(savedView); // Add back all saved views
+                  }
+
+                  // Reset any internal state
+                  mCustomView = null;
+                  if (mCustomViewCallback != null) {
+                    mCustomViewCallback.onCustomViewHidden();
+                  }
+                  mCustomViewCallback = null;
+
+                }
+
+                @Override
+                public void onShowCustomView(View view, WebChromeClient.CustomViewCallback callback) {
+                  // Set fullscreen flags to make the app go fullscreen
+                  if (dialog != null) {
+                    dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+                    dialog.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN);
+                  }
+
+                  // Save all current child views of 'main'
+                  savedViews.clear(); // Clear the saved views list in case we reuse it
+                  for (int i = 0; i < main.getChildCount(); i++) {
+                    savedViews.add(main.getChildAt(i)); // Add all current views to the list
+                  }
+                  main.removeAllViews(); // Remove any existing views from the layout
+                  main.addView(view); // Add the fullscreen view (custom view) to the layout
+
+                  // Store the custom view and its callback for later use
+                  mCustomView = view;
+                  mCustomViewCallback = callback;
+                }
+
+
+              });
                 currentClient = new InAppBrowserClient(thatWebView, edittext, beforeload);
                 inAppWebView.setWebViewClient(currentClient);
                 WebSettings settings = inAppWebView.getSettings();
