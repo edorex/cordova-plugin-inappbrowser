@@ -51,6 +51,7 @@ import android.view.inputmethod.InputMethodManager;
 import android.webkit.CookieManager;
 import android.webkit.HttpAuthHandler;
 import android.webkit.JavascriptInterface;
+import android.webkit.PermissionRequest;
 import android.webkit.SslErrorHandler;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -168,6 +169,9 @@ public class InAppBrowser extends CordovaPlugin {
     private Map<String, String> headers;
     @Nullable
     private Map<String, String> cookies;
+
+    public PermissionRequest pendingPermissionRequest;
+    public static final int REQUEST_CODE_CAMERA = 1001;
 
 
     /**
@@ -752,6 +756,7 @@ public class InAppBrowser extends CordovaPlugin {
         }
 
         final CordovaWebView thatWebView = this.webView;
+        final InAppBrowser that = this;
 
         // Create dialog in new thread
         Runnable runnable = new Runnable() {
@@ -955,9 +960,9 @@ public class InAppBrowser extends CordovaPlugin {
                 inAppWebView.setLayoutParams(new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
                 inAppWebView.setId(Integer.valueOf(6));
                 // File Chooser Implemented ChromeClient
-              inAppWebView.setWebChromeClient(new InAppChromeClient(thatWebView) {
+                inAppWebView.setWebChromeClient(new InAppChromeClient(thatWebView, that) {
                 private View mCustomView;
-                private CustomViewCallback mCustomViewCallback;
+                private WebChromeClient.CustomViewCallback mCustomViewCallback;
 
                 // Save all children of the main layout before entering fullscreen
                 private List<View> savedViews = new ArrayList<>();
@@ -1668,4 +1673,27 @@ public class InAppBrowser extends CordovaPlugin {
             super.onReceivedHttpAuthRequest(view, handler, host, realm);
         }
     }
+
+  @Override
+  public void onRequestPermissionResult(int requestCode, String[] permissions, int[] grantResults) throws JSONException {
+    super.onRequestPermissionResult(requestCode, permissions, grantResults);
+
+    if (requestCode == REQUEST_CODE_CAMERA && pendingPermissionRequest != null) {
+      boolean allGranted = true;
+      for (int result : grantResults) {
+        if (result != PackageManager.PERMISSION_GRANTED) {
+          allGranted = false;
+          break;
+        }
+      }
+
+      if (allGranted) {
+        pendingPermissionRequest.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});
+      } else {
+        pendingPermissionRequest.deny();
+      }
+
+      pendingPermissionRequest = null;
+    }
+  }
 }

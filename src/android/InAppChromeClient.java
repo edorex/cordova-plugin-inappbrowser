@@ -18,13 +18,18 @@
 */
 package org.apache.cordova.inappbrowser;
 
+import static org.apache.cordova.inappbrowser.InAppBrowser.REQUEST_CODE_CAMERA;
+
 import org.apache.cordova.CordovaWebView;
 import org.apache.cordova.LOG;
 import org.apache.cordova.PluginResult;
 import org.json.JSONArray;
 import org.json.JSONException;
 
+import android.Manifest;
 import android.annotation.TargetApi;
+import android.app.Activity;
+import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Message;
 import android.webkit.JsPromptResult;
@@ -36,22 +41,58 @@ import android.webkit.WebViewClient;
 import android.webkit.GeolocationPermissions.Callback;
 import android.webkit.PermissionRequest;
 
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+
+import java.util.ArrayList;
+import java.util.List;
+
 public class InAppChromeClient extends WebChromeClient {
 
     private CordovaWebView webView;
+    private InAppBrowser inAppBrowserPlugin;
     private String LOG_TAG = "InAppChromeClient";
     private long MAX_QUOTA = 100 * 1024 * 1024;
 
-    public InAppChromeClient(CordovaWebView webView) {
+    public InAppChromeClient(CordovaWebView webView, InAppBrowser inAppBrowserPlugin) {
         super();
         this.webView = webView;
+        this.inAppBrowserPlugin = inAppBrowserPlugin;
     }
-    
-    public void onPermissionRequest(final PermissionRequest request) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            request.grant(request.getResources());
+
+  public void onPermissionRequest(final PermissionRequest request) {
+    final String[] requestedResources = request.getResources();
+    final List<String> permissionsToRequest = new ArrayList<>();
+
+    for (String resource : requestedResources) {
+      if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource)) {
+        permissionsToRequest.add(Manifest.permission.CAMERA);
+      }
+    }
+
+    if (!permissionsToRequest.isEmpty()) {
+      inAppBrowserPlugin.pendingPermissionRequest = request;
+
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        if (hasPermissions(permissionsToRequest.toArray(new String[0]))) {
+          // Already granted
+          request.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});
+        } else {
+          // Request permission
+          this.inAppBrowserPlugin.cordova.requestPermissions(
+            this.inAppBrowserPlugin,
+            REQUEST_CODE_CAMERA,
+            permissionsToRequest.toArray(new String[0])
+          );
         }
+      } else {
+        // Permissions auto-granted on older Android versions
+        request.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});
+      }
+    } else {
+      request.deny();
     }
+  }
 
     /**
      * Handle database quota exceeded notification.
@@ -139,7 +180,7 @@ public class InAppChromeClient extends WebChromeClient {
             }
             else {
                 // Anything else with a gap: prefix should get this message
-                LOG.w(LOG_TAG, "InAppBrowser does not support Cordova API calls: " + url + " " + defaultValue); 
+                LOG.w(LOG_TAG, "InAppBrowser does not support Cordova API calls: " + url + " " + defaultValue);
                 result.cancel();
                 return true;
             }
@@ -187,4 +228,13 @@ public class InAppChromeClient extends WebChromeClient {
 
         return true;
     }
+
+  private boolean hasPermissions(String[] permissions) {
+    for (String permission : permissions) {
+      if (ContextCompat.checkSelfPermission(this.inAppBrowserPlugin.cordova.getContext(), permission) != PackageManager.PERMISSION_GRANTED) {
+        return false;
+      }
+    }
+    return true;
+  }
 }
